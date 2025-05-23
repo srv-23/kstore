@@ -2,14 +2,12 @@ import { neon } from "@neondatabase/serverless";
 import dotenv from "dotenv";
 import { join } from 'path';
 
-// Load environment variables
-const result = dotenv.config();
-
-if (result.error) {
-  console.error('Error loading .env file:', result.error);
-  process.exit(1);
+// Only load .env file in development
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
 }
 
+// Get database configuration from environment variables
 const { PGHOST, PGDATABASE, PGUSER, PGPASSWORD } = process.env;
 
 // Debug: Log environment variables (without password)
@@ -17,16 +15,13 @@ console.log('Database Configuration:', {
   host: PGHOST,
   database: PGDATABASE,
   user: PGUSER,
-  hasPassword: !!PGPASSWORD
+  hasPassword: !!PGPASSWORD,
+  environment: process.env.NODE_ENV
 });
 
 if (!PGHOST || !PGDATABASE || !PGUSER || !PGPASSWORD) {
-  console.error('Current working directory:', process.cwd());
-  console.error('Environment variables not found. Please ensure .env file exists with:');
-  console.error('PGHOST=your-host.neon.tech');
-  console.error('PGDATABASE=your-database');
-  console.error('PGUSER=your-username');
-  console.error('PGPASSWORD=your-password');
+  console.error('Missing required database environment variables. Please ensure the following are set:');
+  console.error('PGHOST, PGDATABASE, PGUSER, PGPASSWORD');
   process.exit(1);
 }
 

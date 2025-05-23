@@ -107,6 +107,42 @@ The application will be available at:
 - Frontend: http://localhost:5173
 - Backend: http://localhost:5000
 
+## Deployment
+
+### Deploying to Render
+
+1. Create a new Web Service on Render
+2. Connect your GitHub repository
+3. Configure the service:
+   - **Name**: kstore-backend
+   - **Environment**: Node
+   - **Build Command**: `cd backend && npm install`
+   - **Start Command**: `cd backend && npm start`
+   - **Node Version**: 18.x
+
+4. Add the following environment variables in Render's dashboard:
+   ```
+   PGHOST=your-neon-host
+   PGDATABASE=your-database
+   PGUSER=your-username
+   PGPASSWORD=your-password
+   PORT=5000
+   NODE_ENV=production
+   JWT_SECRET=your-secret-key
+   JWT_EXPIRES_IN=7d
+   ```
+
+5. Deploy the frontend:
+   - Create a new Static Site on Render
+   - Connect your GitHub repository
+   - Configure the service:
+     - **Build Command**: `cd frontend && npm install && npm run build`
+     - **Publish Directory**: `frontend/dist`
+   - Add the following environment variable:
+     ```
+     VITE_API_URL=https://your-backend-url.onrender.com
+     ```
+
 ## Project Structure
 
 ```
