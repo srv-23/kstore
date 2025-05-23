@@ -4,10 +4,11 @@ import morgan from "morgan";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
+import rateLimit from "express-rate-limit";
+import compression from "compression";
 
 import productRoutes from "./routes/productRoutes.js";
 import { sql } from "./config/db.js";
-import { aj } from "./lib/arcjet.js";
 
 dotenv.config();
 
@@ -15,75 +16,77 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const __dirname = path.resolve();
 
-app.use(express.json());
-app.use(cors());
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-  })
-); 
-app.use(morgan("dev")); 
+// Test database connection
+sql`SELECT NOW()`
+  .then(() => console.log('Database connection successful'))
+  .catch(err => {
+    console.error('Database connection error:', err);
+    process.exit(1);
+  });
 
-app.use(async (req, res, next) => {
-  try {
-    const decision = await aj.protect(req, {
-      requested: 1, 
-    });
-
-    if (decision.isDenied()) {
-      if (decision.reason.isRateLimit()) {
-        res.status(429).json({ error: "Too Many Requests" });
-      } else if (decision.reason.isBot()) {
-        res.status(403).json({ error: "Bot access denied" });
-      } else {
-        res.status(403).json({ error: "Forbidden" });
-      }
-      return;
-    }
-
-    if (decision.results.some((result) => result.reason.isBot() && result.reason.isSpoofed())) {
-      res.status(403).json({ error: "Spoofed bot detected" });
-      return;
-    }
-
-    next();
-  } catch (error) {
-    console.log("Arcjet error", error);
-    next(error);
-  }
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+// Middleware
+app.use(compression());
+app.use(express.json({ limit: '10kb' }));
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL 
+    : 'http://localhost:5173',
+  credentials: true
+}));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
+      connectSrc: ["'self'", "http://localhost:3000", "http://localhost:5173"],
+    },
+  },
+}));
+app.use(morgan("dev"));
+app.use(limiter);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error details:', err);
+  res.status(500).json({
+    error: 'Something went wrong!',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// API routes
 app.use("/api/products", productRoutes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Production static file serving
 if (process.env.NODE_ENV === "production") {
-
   app.use(express.static(path.join(__dirname, "/frontend/dist")));
-
   app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"));
+    res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
   });
 }
 
-async function initDB() {
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        image VARCHAR(255) NOT NULL,
-        price DECIMAL(10, 2) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    console.log("Database initialized successfully");
-  } catch (error) {
-    console.log("Error initDB", error);
-  }
-}
-
-initDB().then(() => {
-  app.listen(PORT, () => {
-    console.log("Server is running on port " + PORT);
-  });
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });

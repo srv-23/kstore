@@ -1,6 +1,8 @@
+import { useState } from "react";
+import { useThemeStore } from "../store/useThemeStore.jsx";
+import { Sun, Moon, Monitor } from "lucide-react";
 import { PaletteIcon } from "lucide-react";
 import { THEMES } from "../constants";
-import { useThemeStore } from "../store/useThemeStore";
 
 function ThemeSelector() {
   const { theme, setTheme } = useThemeStore();
